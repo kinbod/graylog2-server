@@ -16,16 +16,15 @@
  */
 package org.graylog2.indexer.counts;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.joschi.jadconfig.util.Duration;
 import com.google.common.collect.ImmutableList;
-import com.google.gson.Gson;
 import io.searchbox.client.JestClient;
 import io.searchbox.indices.Refresh;
 import org.graylog2.bindings.providers.JestClientProvider;
 import org.junit.rules.ExternalResource;
 
 import java.net.URI;
-import java.time.Duration;
-import java.time.temporal.ChronoUnit;
 
 public class JestClientRule extends ExternalResource {
     private final JestClientProvider jestClientProvider;
@@ -35,15 +34,17 @@ public class JestClientRule extends ExternalResource {
         final URI esUri = URI.create("http://localhost:" + esHttpPort);
         this.jestClientProvider = new JestClientProvider(
             ImmutableList.of(esUri),
-            Duration.ofSeconds(10),
-            Duration.ofSeconds(60),
-            Duration.of(60, ChronoUnit.SECONDS),
+            Duration.seconds(10),
+            Duration.seconds(60),
+            Duration.seconds(60),
             20,
+            2,
             2,
             false,
             null,
-            Duration.ofSeconds(30),
-            new Gson()
+            Duration.seconds(30),
+            false,
+            new ObjectMapper()
         );
     }
 

@@ -7,6 +7,8 @@ import Routes from 'routing/Routes';
 import CombinedProvider from 'injection/CombinedProvider';
 
 import { ErrorPopover } from 'components/lookup-tables';
+import { ContentPackMarker } from 'components/common';
+import { MetricContainer, CounterRate } from 'components/metrics';
 
 const { LookupTableDataAdaptersActions } = CombinedProvider.get('LookupTableDataAdapters');
 
@@ -37,10 +39,15 @@ const DataAdapterTableEntry = React.createClass({
           <td>
             {this.props.error && <ErrorPopover errorText={this.props.error} title="Lookup table problem" placement="right" />}
             <LinkContainer to={Routes.SYSTEM.LOOKUPTABLES.DATA_ADAPTERS.show(this.props.adapter.name)}><a>{this.props.adapter.title}</a></LinkContainer>
+            <ContentPackMarker contentPack={this.props.adapter.content_pack} marginLeft={5} />
           </td>
           <td>{this.props.adapter.description}</td>
           <td>{this.props.adapter.name}</td>
-          <td>TODO: <em>0</em></td>
+          <td>
+            <MetricContainer name={`org.graylog2.lookup.adapters.${this.props.adapter.id}.requests`}>
+              <CounterRate suffix="lookups/s" />
+            </MetricContainer>
+          </td>
           <td>
             <LinkContainer to={Routes.SYSTEM.LOOKUPTABLES.DATA_ADAPTERS.edit(this.props.adapter.name)}>
               <Button bsSize="xsmall" bsStyle="info">Edit</Button>

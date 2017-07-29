@@ -22,7 +22,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
-import com.google.gson.Gson;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.ReadContext;
 import com.lordofthejars.nosqlunit.annotation.UsingDataSet;
@@ -51,6 +50,7 @@ import org.graylog2.indexer.IndexMappingFactory;
 import org.graylog2.indexer.IndexNotFoundException;
 import org.graylog2.indexer.IndexSet;
 import org.graylog2.indexer.TestIndexSet;
+import org.graylog2.indexer.cluster.Node;
 import org.graylog2.indexer.indexset.IndexSetConfig;
 import org.graylog2.indexer.indices.events.IndicesClosedEvent;
 import org.graylog2.indexer.indices.events.IndicesDeletedEvent;
@@ -118,9 +118,10 @@ public class IndicesTest extends AbstractESTest {
     public void setUp() throws Exception {
         super.setUp();
         eventBus = new EventBus("indices-test");
-        indexMappingFactory = new IndexMappingFactory(jestClient());
+        final Node node = new Node(jestClient());
+        indexMappingFactory = new IndexMappingFactory(node);
         indices = new Indices(jestClient(),
-                new Gson(),
+                new ObjectMapper(),
                 indexMappingFactory,
                 new Messages(new MetricRegistry(), jestClient()),
                 mock(NodeId.class),

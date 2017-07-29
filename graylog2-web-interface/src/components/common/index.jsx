@@ -1,4 +1,5 @@
 export { default as ClipboardButton } from './ClipboardButton';
+export { default as ContentPackMarker } from './ContentPackMarker';
 export { default as DataFilter } from './DataFilter';
 export { default as DataTable } from './DataTable';
 export { default as DatePicker } from './DatePicker';
@@ -31,5 +32,6 @@ export { default as TimezoneSelect } from './TimezoneSelect';
 export { default as TypeAheadDataFilter } from './TypeAheadDataFilter';
 export { default as TypeAheadFieldInput } from './TypeAheadFieldInput';
 export { default as TypeAheadInput } from './TypeAheadInput';
+export { default as JSONValueInput } from './JSONValueInput';
 export { default as TimeUnitInput } from './TimeUnitInput';
 export { default as TimeUnit } from './TimeUnit';

@@ -17,8 +17,8 @@
 package org.graylog2.indexer.indices;
 
 import com.codahale.metrics.MetricRegistry;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.eventbus.EventBus;
-import com.google.gson.Gson;
 import com.lordofthejars.nosqlunit.annotation.UsingDataSet;
 import com.lordofthejars.nosqlunit.core.LoadStrategyEnum;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
@@ -29,6 +29,7 @@ import org.elasticsearch.action.admin.indices.get.GetIndexResponse;
 import org.graylog2.AbstractESTest;
 import org.graylog2.audit.NullAuditEventSender;
 import org.graylog2.indexer.IndexMappingFactory;
+import org.graylog2.indexer.cluster.Node;
 import org.graylog2.indexer.messages.Messages;
 import org.graylog2.plugin.system.NodeId;
 import org.junit.After;
@@ -53,9 +54,10 @@ public class IndicesGetAllMessageFieldsTest extends AbstractESTest {
     @Before
     public void setUp() throws Exception {
         super.setUp();
+        final Node node = new Node(jestClient());
         indices = new Indices(jestClient(),
-                new Gson(),
-                new IndexMappingFactory(jestClient()),
+                new ObjectMapper(),
+                new IndexMappingFactory(node),
                 new Messages(new MetricRegistry(), jestClient()),
                 mock(NodeId.class),
                 new NullAuditEventSender(),

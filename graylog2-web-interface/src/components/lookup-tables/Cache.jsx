@@ -1,6 +1,7 @@
 import React from 'react';
 import { Row, Col } from 'react-bootstrap';
 import { PluginStore } from 'graylog-web-plugin/plugin';
+import { ContentPackMarker } from 'components/common';
 
 import Styles from './ConfigSummary.css';
 
@@ -26,7 +27,12 @@ const Cache = React.createClass({
     return (
       <Row className="content">
         <Col md={6}>
-          <h2>{cache.title} <small>({plugin.displayName})</small></h2>
+          <h2>
+            {cache.title}
+            <ContentPackMarker contentPack={cache.content_pack} marginLeft={5} />
+            {' '}
+            <small>({plugin.displayName})</small>
+          </h2>
           <div className={Styles.config}>
             <dl>
               <dt>Description</dt>
@@ -38,10 +44,7 @@ const Cache = React.createClass({
             {React.createElement(summary, { cache: cache })}
           </div>
         </Col>
-        <Col md={6}>
-          <h3>TODO: Cached data</h3>
-          <p>Use this to inspect the lookup table cache.</p>
-        </Col>
+        <Col md={6} />
       </Row>
     );
   },

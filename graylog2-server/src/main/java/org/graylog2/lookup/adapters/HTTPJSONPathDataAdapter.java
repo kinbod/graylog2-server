@@ -16,25 +16,33 @@
  */
 package org.graylog2.lookup.adapters;
 
-import com.google.auto.value.AutoValue;
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableMap;
-import com.google.inject.assistedinject.Assisted;
-
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonTypeName;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.floreysoft.jmte.Engine;
+import com.google.auto.value.AutoValue;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Multimap;
+import com.google.inject.assistedinject.Assisted;
 import com.jayway.jsonpath.DocumentContext;
 import com.jayway.jsonpath.InvalidJsonException;
+import com.jayway.jsonpath.InvalidPathException;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.PathNotFoundException;
-
+import okhttp3.Headers;
+import okhttp3.HttpUrl;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 import org.graylog.autovalue.WithBeanGetter;
+import org.graylog2.plugin.lookup.LookupCachePurge;
 import org.graylog2.plugin.lookup.LookupDataAdapter;
 import org.graylog2.plugin.lookup.LookupDataAdapterConfiguration;
 import org.graylog2.plugin.lookup.LookupResult;
@@ -43,25 +51,16 @@ import org.joda.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
+import javax.inject.Inject;
+import javax.ws.rs.core.HttpHeaders;
+import javax.ws.rs.core.MediaType;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ScheduledExecutorService;
-
-import javax.annotation.Nullable;
-import javax.inject.Inject;
-import javax.inject.Named;
-import javax.ws.rs.core.HttpHeaders;
-import javax.ws.rs.core.MediaType;
-
-import okhttp3.Headers;
-import okhttp3.HttpUrl;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.Response;
 
 import static com.google.common.base.Strings.isNullOrEmpty;
 
@@ -83,13 +82,12 @@ public class HTTPJSONPathDataAdapter extends LookupDataAdapter {
 
     @Inject
     protected HTTPJSONPathDataAdapter(@Assisted LookupDataAdapterConfiguration config,
-                                      @Named("daemonScheduler") ScheduledExecutorService scheduler,
                                       @Assisted("id") String id,
                                       @Assisted("name") String name,
                                       Engine templateEngine,
                                       OkHttpClient httpClient,
                                       MetricRegistry metricRegistry) {
-        super(id, name, config, scheduler);
+        super(id, name, config, metricRegistry);
         this.config = (Config) config;
         this.templateEngine = templateEngine;
         // TODO Add config options: caching, timeouts, custom headers, basic auth (See: https://github.com/square/okhttp/wiki/Recipes)
@@ -131,12 +129,12 @@ public class HTTPJSONPathDataAdapter extends LookupDataAdapter {
     }
 
     @Override
-    protected Duration refreshInterval() {
+    public Duration refreshInterval() {
         return Duration.ZERO;
     }
 
     @Override
-    protected void doRefresh() throws Exception {
+    protected void doRefresh(LookupCachePurge cachePurge) throws Exception {
     }
 
     @Override
@@ -266,6 +264,7 @@ public class HTTPJSONPathDataAdapter extends LookupDataAdapter {
     @JsonAutoDetect
     @JsonDeserialize(builder = AutoValue_HTTPJSONPathDataAdapter_Config.Builder.class)
     @JsonTypeName(NAME)
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
     public static abstract class Config implements LookupDataAdapterConfiguration {
         @Override
         @JsonProperty(TYPE_FIELD)
@@ -288,6 +287,33 @@ public class HTTPJSONPathDataAdapter extends LookupDataAdapter {
 
         public static Builder builder() {
             return new AutoValue_HTTPJSONPathDataAdapter_Config.Builder();
+        }
+
+        @Override
+        public Optional<Multimap<String, String>> validate() {
+            final ArrayListMultimap<String, String> errors = ArrayListMultimap.create();
+
+            if (HttpUrl.parse(url()) == null) {
+                errors.put("url", "Invalid URL.");
+            }
+
+            try {
+                final JsonPath jsonPath = JsonPath.compile(singleValueJSONPath());
+                if (!jsonPath.isDefinite()) {
+                    errors.put("single_value_jsonpath", "JSONPath does not return a single value.");
+                }
+            } catch (InvalidPathException e) {
+                errors.put("single_value_jsonpath", "Invalid JSONPath.");
+            }
+            if (multiValueJSONPath().isPresent()) {
+                try {
+                    JsonPath.compile(multiValueJSONPath().get());
+                } catch (InvalidPathException e) {
+                    errors.put("multi_value_jsonpath", "Invalid JSONPath.");
+                }
+            }
+
+            return errors.isEmpty() ? Optional.empty() : Optional.of(errors);
         }
 
         @AutoValue.Builder

@@ -16,55 +16,50 @@
  */
 package org.graylog2.plugin.lookup;
 
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.util.concurrent.AbstractIdleService;
 import com.google.inject.assistedinject.Assisted;
-
-import com.fasterxml.jackson.annotation.JsonProperty;
-
-import org.graylog2.lookup.LookupTable;
 import org.joda.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import javax.inject.Named;
-
 import static com.google.common.base.Preconditions.checkState;
+import static org.graylog2.utilities.ObjectUtils.objectId;
 
 public abstract class LookupDataAdapter extends AbstractIdleService {
     private static final Logger LOG = LoggerFactory.getLogger(LookupDataAdapter.class);
 
     private final String id;
-    private LookupTable lookupTable;
     private final String name;
 
     private final LookupDataAdapterConfiguration config;
-    private final ScheduledExecutorService scheduler;
-    private ScheduledFuture<?> refreshFuture = null;
+    private final Timer requestTimer;
+    private final Timer refreshTimer;
 
     private AtomicReference<Throwable> dataSourceError = new AtomicReference<>();
 
-    protected LookupDataAdapter(String id, String name, LookupDataAdapterConfiguration config,
-                                @Named("daemonScheduler") ScheduledExecutorService scheduler) {
+    protected LookupDataAdapter(String id, String name, LookupDataAdapterConfiguration config, MetricRegistry metricRegistry) {
         this.id = id;
         this.name = name;
         this.config = config;
-        this.scheduler = scheduler;
+
+        this.requestTimer = metricRegistry.timer(MetricRegistry.name("org.graylog2.lookup.adapters", id, "requests"));
+        this.refreshTimer = metricRegistry.timer(MetricRegistry.name("org.graylog2.lookup.adapters", id, "refresh"));
     }
 
     @Override
     protected void startUp() throws Exception {
-        doStart();
-
-        final Duration interval = refreshInterval();
-        if (!interval.equals(Duration.ZERO)) {
-            LOG.debug("Schedule data adapter refresh method every {}ms", interval.getMillis());
-            this.refreshFuture = scheduler.scheduleAtFixedRate(this::refresh, interval.getMillis(), interval.getMillis(), TimeUnit.MILLISECONDS);
+        // Make sure startUp() never throws an error - we handle errors internally
+        try {
+            doStart();
+        } catch (Exception e) {
+            LOG.error("Couldn't start data adapter <{}/{}/@{}>", name(), id(), objectId(this), e);
+            setError(e);
         }
     }
 
@@ -72,10 +67,12 @@ public abstract class LookupDataAdapter extends AbstractIdleService {
 
     @Override
     protected void shutDown() throws Exception {
-        if (refreshFuture != null && !refreshFuture.isCancelled()) {
-            refreshFuture.cancel(true);
+        // Make sure shutDown() never throws an error - we handle errors internally
+        try {
+            doStop();
+        } catch (Exception e) {
+            LOG.error("Couldn't stop data adapter <{}/{}/@{}>", name(), id(), objectId(this), e);
         }
-        doStop();
     }
 
     protected abstract void doStop() throws Exception;
@@ -84,17 +81,18 @@ public abstract class LookupDataAdapter extends AbstractIdleService {
      * Returns the refresh interval for this data adapter. Use {@link Duration#ZERO} if refresh should be disabled.
      * @return the refresh interval
      */
-    protected abstract Duration refreshInterval();
+    public abstract Duration refreshInterval();
 
-    public void refresh() {
-        try {
-            doRefresh();
+    public void refresh(LookupCachePurge cachePurge) {
+        // Make sure refresh() never throws an error - we handle errors internally
+        try (final Timer.Context ignored = refreshTimer.time()) {
+            doRefresh(cachePurge);
         } catch (Exception e) {
-            LOG.error("Couldn't refresh data adapter", e);
+            LOG.error("Couldn't refresh data adapter <{}/{}/@{}>", name(), id(), objectId(this), e);
         }
     }
 
-    protected abstract void doRefresh() throws Exception;
+    protected abstract void doRefresh(LookupCachePurge cachePurge) throws Exception;
 
     protected void clearError() {
         dataSourceError.set(null);
@@ -115,21 +113,15 @@ public abstract class LookupDataAdapter extends AbstractIdleService {
     public String name() {
         return name;
     }
-    public LookupTable getLookupTable() {
-        checkState(lookupTable != null, "lookup table cannot be null");
-        return lookupTable;
-    }
-
-    public void setLookupTable(LookupTable lookupTable) {
-        this.lookupTable = lookupTable;
-    }
 
     public LookupResult get(Object key) {
         if (state() == State.FAILED) {
             return LookupResult.empty();
         }
         checkState(isRunning(), "Data adapter needs to be started before it can be used");
-        return doGet(key);
+        try (final Timer.Context ignored = requestTimer.time()) {
+            return doGet(key);
+        }
     }
     protected abstract LookupResult doGet(Object key);
 

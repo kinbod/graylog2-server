@@ -2,6 +2,7 @@ import React from 'react';
 import { Button, Row, Col } from 'react-bootstrap';
 import { Input } from 'components/bootstrap';
 import FormsUtils from 'util/FormsUtils';
+import { ContentPackMarker } from 'components/common';
 import { PluginStore } from 'graylog-web-plugin/plugin';
 import CombinedProvider from 'injection/CombinedProvider';
 import Styles from './ConfigSummary.css';
@@ -12,18 +13,12 @@ const DataAdapter = React.createClass({
 
   propTypes: {
     dataAdapter: React.PropTypes.object.isRequired,
-    lookupResult: React.PropTypes.object,
-  },
-
-  getDefaultProps() {
-    return {
-      lookupResult: null,
-    };
   },
 
   getInitialState() {
     return {
       lookupKey: null,
+      lookupResult: null,
     };
   },
 
@@ -33,7 +28,9 @@ const DataAdapter = React.createClass({
 
   _lookupKey(e) {
     e.preventDefault();
-    LookupTableDataAdaptersActions.lookup(this.props.dataAdapter.name, this.state.lookupKey);
+    LookupTableDataAdaptersActions.lookup(this.props.dataAdapter.name, this.state.lookupKey).then((result) => {
+      this.setState({ lookupResult: result });
+    });
   },
 
   render() {
@@ -52,7 +49,12 @@ const DataAdapter = React.createClass({
     return (
       <Row className="content">
         <Col md={6}>
-          <h2>{dataAdapter.title} <small>({plugin.displayName})</small></h2>
+          <h2>
+            {dataAdapter.title}
+            <ContentPackMarker contentPack={dataAdapter.content_pack} marginLeft={5} />
+            {' '}
+            <small>({plugin.displayName})</small>
+          </h2>
           <div className={Styles.config}>
             <dl>
               <dt>Description</dt>
@@ -84,10 +86,10 @@ const DataAdapter = React.createClass({
               </Input>
             </fieldset>
           </form>
-          { this.props.lookupResult && (
+          { this.state.lookupResult && (
             <div>
               <h4>Lookup result</h4>
-              <pre>{JSON.stringify(this.props.lookupResult, null, 2)}</pre>
+              <pre>{JSON.stringify(this.state.lookupResult, null, 2)}</pre>
             </div>
           )}
         </Col>

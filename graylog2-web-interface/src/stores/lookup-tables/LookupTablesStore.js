@@ -92,13 +92,17 @@ const LookupTablesStore = Reflux.createStore({
     const url = this._url('tables');
     const promise = fetch('POST', url, table);
 
+    promise.catch(this._errorHandler('Creating lookup table failed', `Could not create lookup table "${table.name}"`));
+
     LookupTablesActions.create.promise(promise);
     return promise;
   },
 
   update(table) {
-    const url = this._url('tables');
+    const url = this._url(`tables/${table.id}`);
     const promise = fetch('PUT', url, table);
+
+    promise.catch(this._errorHandler('Updating lookup table failed', `Could not update lookup table "${table.name}"`));
 
     LookupTablesActions.update.promise(promise);
     return promise;
@@ -107,6 +111,8 @@ const LookupTablesStore = Reflux.createStore({
   delete(idOrName) {
     const url = this._url(`tables/${idOrName}`);
     const promise = fetch('DELETE', url);
+
+    promise.catch(this._errorHandler('Deleting lookup table failed', `Could not delete lookup table "${idOrName}"`));
 
     LookupTablesActions.delete.promise(promise);
     return promise;
@@ -147,14 +153,58 @@ const LookupTablesStore = Reflux.createStore({
       this.trigger({
         lookupResult: response,
       });
-    });
+    }, this._errorHandler('Lookup failed', `Could not lookup value for key "${key}" in lookup table "${tableName}"`));
 
     LookupTablesActions.lookup.promise(promise);
     return promise;
   },
 
+  purgeKey(table, key) {
+    const promise = fetch('POST', this._url(`tables/${table.id}/purge?key=${key}`));
+
+    promise.then(() => {
+      UserNotification.success(`Purging cache key "${key}" for lookup table "${table.name}"`, 'Success!');
+    }, this._errorHandler(`Could not purge cache for key "${key}" in lookup table "${table.name}"`, 'Failed!'));
+
+    LookupTablesActions.purgeKey.promise(promise);
+    return promise;
+  },
+
+  purgeAll(table) {
+    const promise = fetch('POST', this._url(`tables/${table.id}/purge`));
+
+    promise.then(() => {
+      UserNotification.success(`Purging cache for lookup table "${table.name}"`, 'Success!');
+    }, this._errorHandler(`Could not purge cache for lookup table "${table.name}"`, 'Failed!'));
+
+    LookupTablesActions.purgeAll.promise(promise);
+    return promise;
+  },
+
+  validate(table) {
+    const url = this._url('tables/validate');
+    const promise = fetch('POST', url, table);
+
+    promise.then((response) => {
+      this.trigger({
+        validationErrors: response.errors,
+      });
+    }, this._errorHandler('Lookup table validation failed', `Could not validate lookup table "${table.name}"`));
+    LookupTablesActions.validate.promise(promise);
+    return promise;
+  },
+
   _errorHandler(message, title, cb) {
     return (error) => {
+      try {
+        // Do not show the user notification if the error is a hibernate error message. We cannot display those
+        // properly yet...
+        if (error.additional.body[0].message_template) {
+          return;
+        }
+      } catch (e) {
+        // ignored
+      }
       let errorMessage;
       try {
         errorMessage = error.additional.body.message;
